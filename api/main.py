@@ -37,7 +37,7 @@ class UserSignUp(BaseModel):
     email: EmailStr  # Automatically rejects malformed emails (e.g., missing '@' or '.com')
     password: str
 
---- ENDPOINTS ---
+#--- ENDPOINTS ---
 
 # 👤 API Route 1: Save User (POST)
 @app.post("/api/users")
