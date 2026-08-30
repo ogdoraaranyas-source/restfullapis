@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import pymysql
 
-# 1. Initialize FastAPI
+# 1. Initialize FastAPI (Must be named app for Vercel)
 app = FastAPI(title="E-Commerce Identity Engine")
 
 # 2. Configure CORS so Flutter can communicate safely
@@ -16,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#q0f0ECHvJJRZEZoq
 # 3. Secure TiDB Connection Pool Helper
 def get_db_connection():
     try:
@@ -26,7 +25,7 @@ def get_db_connection():
             password=os.getenv("TIDB_PASSWORD"),
             database=os.getenv("TIDB_DB"),
             port=4000,
-            ssl={"ssl_p豐富": True} # Enforces modern security protocols over serverless hops
+            ssl={"ssl_disabled": False} # Corrected character error to support secure hops
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
@@ -37,7 +36,7 @@ class UserSignUp(BaseModel):
     email: EmailStr  # Automatically rejects malformed emails (e.g., missing '@' or '.com')
     password: str
 
-#--- ENDPOINTS ---
+# --- ENDPOINTS ---
 
 # 👤 API Route 1: Save User (POST)
 @app.post("/api/users")
