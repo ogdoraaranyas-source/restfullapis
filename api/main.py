@@ -25,7 +25,7 @@ def get_db_connection():
             password=os.getenv("TIDB_PASSWORD"),
             database=os.getenv("TIDB_DB"),
             port=4000,
-            ssl={"ssl_disabled": False} # Corrected character error to support secure hops
+            ssl={"ssl_disabled": False}  # Corrected character error to support secure hops
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")

@@ -3,3 +3,4 @@ uvicorn
 pymysql
 cryptography
 pydantic
+email-validator
