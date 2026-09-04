@@ -61,12 +61,14 @@ def get_all_category():
             
             # Format raw datetime timestamps cleanly to safely output JSON responses
             for cat in categories:
-                if cat['created_at'] and isinstance(cat['created_at'], datetime):
+                if cat.get('created_at') and isinstance(cat['created_at'], datetime):
                     cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
                     
         return {"success": True, "categories": categories}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     finally:
         connection.close()
 
