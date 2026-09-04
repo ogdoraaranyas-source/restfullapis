@@ -1,30 +1,87 @@
 import os
-from fastapi import APIRouter, UploadFile, File, HTTPException
-import shutil
+import io
+import base64
 from datetime import datetime
+from fastapi import APIRouter, HTTPException, UploadFile, File
+import requests
+import pymysql
+from PIL import Image
 
-router = APIRouter(tags=["Upload Image"])
+router = APIRouter(tags=["Global Image Optimization"])
 
-@router.post("/uploadimage")
-async def upload_image(file: UploadFile = File(...)):
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO_OWNER = "ogdoraaranyas-source"         
+REPO_NAME = "restfullapis"               
+BRANCH = "main"
+
+def get_db_connection():
     try:
-        # Create uploads directory if it doesn't exist
-        os.makedirs("uploads", exist_ok=True)
+        return pymysql.connect(
+            host=os.getenv("TIDB_HOST"),
+            user=os.getenv("TIDB_USER"),
+            password=os.getenv("TIDB_PASSWORD"),
+            database=os.getenv("TIDB_DB"),
+            port=4000,
+            ssl={"ssl_disabled": False}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
+
+# This path matches your code config perfectly
+@router.post("/upload-image")
+async def upload_general_image(file: UploadFile = File(...)):
+    if not GITHUB_TOKEN:
+        raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
+
+    try:
+        # 1. Read bytes straight into volatile RAM memory buffers
+        file_bytes = await file.read()
+        img = Image.open(io.BytesIO(file_bytes))
         
-        # Generate unique filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
-        file_path = f"uploads/{filename}"
+        # 2. Downsize bounds in memory cleanly
+        max_size = 1024
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            
+        # 3. Compress directly into a raw bytes memory buffer stream
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format="WEBP", quality=75)
+        optimized_bytes = output_buffer.getvalue()
         
-        # Save the file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # 4. Convert memory stream to base64 string
+        encoded_content = base64.b64encode(optimized_bytes).decode("utf-8")
+        
+        base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
+        filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
+        
+        # GitHub API Endpoint Target 
+        target_url = f"https://github.com{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
+        
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        payload = {
+            "message": f"Admin Panel Media Asset Pushed: {filename}",
+            "content": encoded_content,
+            "branch": BRANCH
+        }
+        
+        # 5. Push the memory string straight over the network to GitHub
+        response = requests.put(target_url, json=payload, headers=headers)
+        
+        if response.status_code not in [200, 201]:
+            raise HTTPException(status_code=500, detail=f"GitHub repository upload failed: {response.text}")
+            
+        # Statically Open-Source Global Caching CDN delivery URL
+        production_cdn_url = f"https://statically.io{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
-            "success": True,
-            "message": "File uploaded successfully",
-            "url": f"/uploads/{filename}",
-            "filename": filename
+            "success": True, 
+            "message": "Image compressed to WebP and live on CDN!",
+            "thumbnail_url": production_cdn_url
         }
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Image processing compression pipeline failed: {str(e)}")
