@@ -7,3 +7,4 @@ email-validator
 Pillow
 requests
 python-multipart
+mangum

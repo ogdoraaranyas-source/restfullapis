@@ -14,8 +14,8 @@ from api.uploadimage import router as upload_image_router
 app = FastAPI(title="E-Commerce Identity Engine")
 
 # Mount static files directory
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+#os.makedirs("uploads", exist_ok=True)
+#app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Configure CORS
 app.add_middleware(
