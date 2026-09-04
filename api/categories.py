@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 import pymysql
 
-router = APIRouter(prefix="/api", tags=["Categories Management"])
+router = APIRouter(tags=["Categories Management"])
 
 def get_db_connection():
     try:
