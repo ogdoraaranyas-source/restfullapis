@@ -77,3 +77,51 @@ def get_users():
         raise HTTPException(status_code=500, detail=f"Database internal failure: {str(e)}")
     finally:
         connection.close()
+
+  
+
+@app.post("/api/login")
+def login_user(login_data: UserLogin):
+    connection = get_db_connection()
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            # 1. UPDATED: Fetch target record using 'phone_number' and select 'password_hash' 
+            sql = "SELECT id, name, phone_number, password_hash FROM users WHERE phone_number = %s"
+            cursor.execute(sql, (login_data.mobile,))
+            user_record = cursor.fetchone()
+
+            # 2. Check if the user record exists in the database framework
+            if not user_record:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, 
+                    detail="User not found"
+                )
+
+            # 3. UPDATED: Verify passwords matching your password_hash layout string 
+            # Note: If you are storing plain text under password_hash right now, keep line below.
+            # If using bcrypt hashes, replace line with: if not pwd_context.verify(login_data.password, user_record["password_hash"]):
+            if user_record["password_hash"] != login_data.password:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, 
+                    detail="Invalid credentials. Incorrect password."
+                )
+
+            # 4. Successful authenticated payload configuration map
+            return {
+                "success": True,
+                "message": "Login successful! Welcome to the Admin Portal Dashboard Hub.",
+                "user": {
+                    "id": user_record["id"],
+                    "name": user_record["name"],
+                    "phone_number": user_record["phone_number"]
+                    # Stripped out returning password string assets for secure network communication
+                }
+            }
+            
+    except pymysql.MySQLError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Database internal operational failure: {str(e)}"
+        )
+    finally:
+        connection.close()
