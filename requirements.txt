@@ -5,3 +5,5 @@ cryptography
 pydantic
 email-validator
 Pillow
+requests
+python-multipart
