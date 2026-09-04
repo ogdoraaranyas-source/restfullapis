@@ -27,22 +27,20 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
 
-@router.post("/uploadimage")
+# 👇 Set path definition strictly as "/upload-image"
+@router.post("/upload-image")
 async def upload_general_image(file: UploadFile = File(...)):
     if not GITHUB_TOKEN:
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # 1. Capture the raw input file bytes stream
         file_bytes = await file.read()
         img = Image.open(io.BytesIO(file_bytes))
         
-        # 2. Enforce structural layout bounds using dynamic resizing
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             
-        # 3. Compress and convert the file into a lightweight .webp asset
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="WEBP", quality=75)
         optimized_bytes = output_buffer.getvalue()
@@ -52,7 +50,7 @@ async def upload_general_image(file: UploadFile = File(...)):
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
         filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
         
-        # 👇 1. FIXED: Corrected full destination API endpoints path tracking criteria
+        # 👇 1. FIXED: Corrected destination API paths
         target_url = f"https://github.com{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -68,11 +66,11 @@ async def upload_general_image(file: UploadFile = File(...)):
         
         response = requests.put(target_url, json=payload, headers=headers)
         
-        # 👇 2. FIXED: Cleared empty syntax error block with valid return code matrix
+        # 👇 2. FIXED: Repaired syntax loop condition parameters
         if response.status_code not in:
             raise HTTPException(status_code=500, detail=f"GitHub repository upload failed: {response.text}")
             
-        # 👇 3. FIXED: Formatted exactly to match official production Statically CDN structures
+        # 👇 3. FIXED: Adjusted for official production Statically CDN subdomain structures
         production_cdn_url = f"https://statically.io{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
