@@ -158,3 +158,6 @@ def login_user(login_data: UserLogin):
         raise HTTPException(status_code=500, detail=f"Database internal operational failure: {str(e)}")
     finally:
         connection.close()
+
+from mangum import Mangum
+handler = Mangum(app)        

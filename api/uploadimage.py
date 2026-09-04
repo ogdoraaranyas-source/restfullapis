@@ -60,8 +60,8 @@ async def upload_general_image(file: UploadFile = File(...)):
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
         filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
         
-        # GitHub API Endpoint Target 
-        target_url = f"https://github.com{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
+        # ✅ FIXED: Correct GitHub API Endpoint 
+        target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
@@ -80,8 +80,8 @@ async def upload_general_image(file: UploadFile = File(...)):
         if response.status_code not in [200, 201]:
             raise HTTPException(status_code=500, detail=f"GitHub repository upload failed: {response.text}")
             
-        # Statically Open-Source Global Caching CDN delivery URL
-        production_cdn_url = f"https://statically.io{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
+        # ✅ FIXED: Correct CDN URL format
+        production_cdn_url = f"https://statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True, 
