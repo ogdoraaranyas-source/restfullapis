@@ -42,8 +42,8 @@ class UserLogin(BaseModel):
     password_hash: str  
 
 # --- ENDPOINTS ---
-
-# 👤 API Route 1: Save User (POST)
+ 
+ # 👤 API Route 1: Save User (POST) - UPDATED FOR PASSWORD_HASH
 @app.post("/api/users")
 def save_user(user_data: UserSignUp):
     connection = get_db_connection()
@@ -54,8 +54,10 @@ def save_user(user_data: UserSignUp):
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Email already registered in system")
 
-            # Write the new profile record directly to TiDB
-            sql = "INSERT INTO users (name, email, password) VALUES (%s, %s, %s)"
+            # 👇 FIXED: Changed 'password' column name to 'password_hash' to match your TiDB table structure
+            sql = "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)"
+            
+            # Note: We are passing user_data.password straight into the password_hash parameter slot
             cursor.execute(sql, (user_data.name, user_data.email, user_data.password))
             connection.commit()
             
@@ -65,6 +67,7 @@ def save_user(user_data: UserSignUp):
         raise HTTPException(status_code=500, detail=f"Database internal failure: {str(e)}")
     finally:
         connection.close()
+
 
 # 👥 API Route 2: Get All Users (GET)
 @app.get("/api/users")
