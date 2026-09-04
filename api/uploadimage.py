@@ -27,7 +27,7 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
 
-@router.post("/upload-image")
+@router.post("/uploadimage")
 async def upload_general_image(file: UploadFile = File(...)):
     if not GITHUB_TOKEN:
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
