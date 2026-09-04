@@ -56,9 +56,9 @@ def save_user(user_data: UserSignUp):
     try:
         with connection.cursor() as cursor:
             # Check if email already exists to prevent duplicate entries
-            cursor.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
-            if cursor.fetchone():
-                raise HTTPException(status_code=400, detail="Email already registered in system")
+           # cursor.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
+           # if cursor.fetchone():
+           #     raise HTTPException(status_code=400, detail="Email already registered in system")
                 
             # Check if mobile already exists
             cursor.execute("SELECT id FROM users WHERE mobile = %s", (user_data.mobile,))
