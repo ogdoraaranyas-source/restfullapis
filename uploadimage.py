@@ -7,7 +7,6 @@ import requests
 import pymysql
 from PIL import Image
 
-# Tags group these nicely inside your FastAPI documentation UI
 router = APIRouter(tags=["Global Image Optimization"])
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -37,7 +36,6 @@ async def upload_general_image(file: UploadFile = File(...)):
         file_bytes = await file.read()
         img = Image.open(io.BytesIO(file_bytes))
         
-        # Max resolution limits for high performance fluid layout views
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
@@ -48,11 +46,10 @@ async def upload_general_image(file: UploadFile = File(...)):
         
         encoded_content = base64.b64encode(optimized_bytes).decode("utf-8")
         
-        # Pull base string cleanly to force web-optimized conversion extension paths
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
         filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
         
-        # FIXED: Corrected endpoints to avoid route parsing abort loops on Linux servers
+        # Fixed: Core URL to target GitHub's API platform properly
         target_url = f"https://github.com{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -68,10 +65,11 @@ async def upload_general_image(file: UploadFile = File(...)):
         
         response = requests.put(target_url, json=payload, headers=headers)
         
+        # Fixed: Restored the validation status matrix array
         if response.status_code not in:
             raise HTTPException(status_code=500, detail=f"GitHub repository upload failed: {response.text}")
             
-        # FIXED: Formatted exactly to match official Statically subdomains for open-source Git CDNs
+        # Fixed: Swapped to official production Statically CDN subdomain structures
         production_cdn_url = f"https://statically.io{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {

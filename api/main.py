@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(categories_router, prefix="/api")
 app.include_router(upload_image_router, prefix="/api")
 
+
 # 3. Secure TiDB Connection Pool Helper
 def get_db_connection():
     try:
