@@ -27,28 +27,34 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
 
-# This path matches your code config perfectly
-@router.post("/upload-image")
+@router.post("/uploadimage")
 async def upload_general_image(file: UploadFile = File(...)):
     if not GITHUB_TOKEN:
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # 1. Read bytes straight into volatile RAM memory buffers
+        # 👇 1. SAFETY CHECKPOINT: Reset the internal pointer to the start of the file stream
+        await file.seek(0)
+        
+        # 2. Read bytes straight into volatile RAM memory buffers
         file_bytes = await file.read()
+        
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
+            
         img = Image.open(io.BytesIO(file_bytes))
         
-        # 2. Downsize bounds in memory cleanly
+        # 3. Downsize bounds in memory cleanly
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             
-        # 3. Compress directly into a raw bytes memory buffer stream
+        # 4. Compress directly into a raw bytes memory buffer stream
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="WEBP", quality=75)
         optimized_bytes = output_buffer.getvalue()
         
-        # 4. Convert memory stream to base64 string
+        # 5. Convert memory stream to base64 string
         encoded_content = base64.b64encode(optimized_bytes).decode("utf-8")
         
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
@@ -68,7 +74,7 @@ async def upload_general_image(file: UploadFile = File(...)):
             "branch": BRANCH
         }
         
-        # 5. Push the memory string straight over the network to GitHub
+        # 6. Push the memory string straight over the network to GitHub
         response = requests.put(target_url, json=payload, headers=headers)
         
         if response.status_code not in [200, 201]:
