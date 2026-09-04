@@ -9,7 +9,7 @@ import pymysql
 # 👇 1. IMPORT THE ROUTER FROM YOUR CATEGORIES FILE
 # (This looks inside categories.py and extracts the "router" variable)
 from api.categories import router as categories_router
-from api.uploadimage import router as upload_image_router
+#from api.uploadimage import router as upload_image_router
 
 
 # 1. Initialize FastAPI (Must be named app for Vercel)
