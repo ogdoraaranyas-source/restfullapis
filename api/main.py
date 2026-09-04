@@ -78,7 +78,12 @@ def get_users():
     finally:
         connection.close()
 
-  
+
+
+class UserLogin(BaseModel):
+    # This matches the exact keys you are sending in your JSON payload
+    phone_number: str 
+    password_hash: str  
 
 @app.post("/api/login")
 def login_user(login_data: UserLogin):
