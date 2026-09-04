@@ -5,6 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import pymysql
 
+
+# 👇 1. IMPORT THE ROUTER FROM YOUR CATEGORIES FILE
+# (This looks inside categories.py and extracts the "router" variable)
+from categories import router as categories_router
+
 # 1. Initialize FastAPI (Must be named app for Vercel)
 app = FastAPI(title="E-Commerce Identity Engine")
 
@@ -16,6 +21,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 👇 2. ATTACH THE ROUTER LAYER DYNAMICALLY RIGHT HERE
+# This registers all your category endpoints under the primary application stack
+app.include_router(categories_router)
 
 # 3. Secure TiDB Connection Pool Helper
 def get_db_connection():
