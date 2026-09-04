@@ -27,7 +27,7 @@ app.add_middleware(
 # 👇 2. ATTACH THE ROUTER LAYER DYNAMICALLY RIGHT HERE
 # This registers all your category endpoints under the primary application stack
 app.include_router(categories_router, prefix="/api")  # Prefix ensures all category routes are under /api
-#app.include_router(upload_image_router, prefix="/api")  # Prefix ensures all upload image routes are under /api
+app.include_router(upload_image_router, prefix="/api")
 
 # 3. Secure TiDB Connection Pool Helper
 def get_db_connection():
