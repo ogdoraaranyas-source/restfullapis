@@ -33,24 +33,16 @@ async def upload_general_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # ✅ 1. Check file type first
-        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"]
-        if file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Invalid file type: {file.content_type}. Only images (JPEG, PNG, GIF, WEBP, BMP) are allowed."
-            )
-
-        # ✅ 2. Reset file pointer
+        # ✅ 1. Reset file pointer
         await file.seek(0)
         
-        # 3. Read bytes
+        # 2. Read bytes
         file_bytes = await file.read()
         
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 4. Try to open with Pillow with proper error handling
+        # ✅ 3. Let Pillow validate the image (removed strict content-type check)
         try:
             img = Image.open(io.BytesIO(file_bytes))
             img.verify()  # Verify it's a valid image
@@ -66,20 +58,20 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"Unable to process the image: {str(e)}"
             )
         
-        # 5. Downsize bounds in memory cleanly
+        # 4. Downsize bounds in memory cleanly
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             
-        # 6. Compress directly into a raw bytes memory buffer stream
+        # 5. Compress directly into a raw bytes memory buffer stream
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="WEBP", quality=75)
         optimized_bytes = output_buffer.getvalue()
         
-        # 7. Convert memory stream to base64 string
+        # 6. Convert memory stream to base64 string
         encoded_content = base64.b64encode(optimized_bytes).decode("utf-8")
         
-        base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
+        base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
         
         # ✅ Correct GitHub API Endpoint
@@ -96,7 +88,7 @@ async def upload_general_image(file: UploadFile = File(...)):
             "branch": BRANCH
         }
         
-        # 8. Push to GitHub
+        # 7. Push to GitHub
         response = requests.put(target_url, json=payload, headers=headers)
         
         if response.status_code not in [200, 201]:
