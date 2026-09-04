@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import requests
 import pymysql
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 router = APIRouter(tags=["Global Image Optimization"])
 
@@ -33,34 +33,56 @@ async def upload_general_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # 👇 1. SAFETY CHECKPOINT: Reset the internal pointer to the start of the file stream
+        # ✅ 1. Check file type first
+        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid file type: {file.content_type}. Only images (JPEG, PNG, GIF, WEBP, BMP) are allowed."
+            )
+
+        # ✅ 2. Reset file pointer
         await file.seek(0)
         
-        # 2. Read bytes straight into volatile RAM memory buffers
+        # 3. Read bytes
         file_bytes = await file.read()
         
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
-            
-        img = Image.open(io.BytesIO(file_bytes))
         
-        # 3. Downsize bounds in memory cleanly
+        # ✅ 4. Try to open with Pillow with proper error handling
+        try:
+            img = Image.open(io.BytesIO(file_bytes))
+            img.verify()  # Verify it's a valid image
+            img = Image.open(io.BytesIO(file_bytes))  # Reopen after verification
+        except UnidentifiedImageError:
+            raise HTTPException(
+                status_code=400, 
+                detail="The uploaded file is not a valid image. Please upload a proper image file."
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unable to process the image: {str(e)}"
+            )
+        
+        # 5. Downsize bounds in memory cleanly
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             
-        # 4. Compress directly into a raw bytes memory buffer stream
+        # 6. Compress directly into a raw bytes memory buffer stream
         output_buffer = io.BytesIO()
         img.save(output_buffer, format="WEBP", quality=75)
         optimized_bytes = output_buffer.getvalue()
         
-        # 5. Convert memory stream to base64 string
+        # 7. Convert memory stream to base64 string
         encoded_content = base64.b64encode(optimized_bytes).decode("utf-8")
         
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_')
         filename = f"img_{int(datetime.utcnow().timestamp())}_{base_filename}.webp"
         
-        # ✅ FIXED: Correct GitHub API Endpoint 
+        # ✅ Correct GitHub API Endpoint
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -74,20 +96,26 @@ async def upload_general_image(file: UploadFile = File(...)):
             "branch": BRANCH
         }
         
-        # 6. Push the memory string straight over the network to GitHub
+        # 8. Push to GitHub
         response = requests.put(target_url, json=payload, headers=headers)
         
         if response.status_code not in [200, 201]:
             raise HTTPException(status_code=500, detail=f"GitHub repository upload failed: {response.text}")
             
-        # ✅ FIXED: Correct CDN URL format
+        # Correct CDN URL format
         production_cdn_url = f"https://statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True, 
             "message": "Image compressed to WebP and live on CDN!",
-            "thumbnail_url": production_cdn_url
+            "thumbnail_url": production_cdn_url,
+            "filename": filename,
+            "content_type": file.content_type,
+            "size_original": len(file_bytes),
+            "size_optimized": len(optimized_bytes)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image processing compression pipeline failed: {str(e)}")
