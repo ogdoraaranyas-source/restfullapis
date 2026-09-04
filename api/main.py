@@ -31,41 +31,41 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
 
-# 4. Pydantic Schema Model updated to support full profile parameters on sign up
+# 4. Pydantic Schema Model for SaveUser - Matches your actual database columns
 class UserSignUp(BaseModel):
     name: str
     email: EmailStr
     password: str
     first_name: str | None = None
     last_name: str | None = None
-    mobile: str | None = None
-    role: str = "customer"  # Matches your fallback default role assignment state
-    status: str = "pending_verification"  # Matches your default data validation status
+    mobile: str
+    role: str = "customer"
+    status: str = "pending_verification"
 
-# 5. Fixed Pydantic Schema Model for Login to use 'mobile' matching your database profile
+# 5. Corrected Pydantic Schema Model for Login to use 'mobile' and 'password'
 class UserLogin(BaseModel):
     mobile: str 
     password: str  
 
 # --- ENDPOINTS ---
  
-# 👤 API Route 1: Save User (POST) - Mapped precisely to your updated schema grid
+# 👤 API Route 1: Save User (POST) - Maps precisely to your explicit column keys
 @app.post("/api/users")
 def save_user(user_data: UserSignUp):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            # Check if email or mobile already exists to prevent duplication
+            # Check if email already exists to prevent duplicate entries
             cursor.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Email already registered in system")
                 
-            if user_data.mobile:
-                cursor.execute("SELECT id FROM users WHERE mobile = %s", (user_data.mobile,))
-                if cursor.fetchone():
-                    raise HTTPException(status_code=400, detail="Mobile number already registered in system")
+            # Check if mobile already exists
+            cursor.execute("SELECT id FROM users WHERE mobile = %s", (user_data.mobile,))
+            if cursor.fetchone():
+                raise HTTPException(status_code=400, detail="Mobile number already registered in system")
 
-            # Writes comprehensive array criteria safely including timestamps
+            # Writes comprehensive array criteria safely using your exact database columns
             sql = """
                 INSERT INTO users 
                 (name, email, password, first_name, last_name, mobile, role, status, created_at, updated_at) 
@@ -85,15 +85,15 @@ def save_user(user_data: UserSignUp):
     finally:
         connection.close()
 
-# 👥 API Route 2: Get All Users (GET) - Features exhaustive enterprise columns output
+# 👥 API Route 2: Get All Users (GET) - Features your exact layout fields
 @app.get("/api/users")
 def get_users():
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            # Retrieves full record data metrics, sorting newest profiles first
+            # Retrieves full structural details from your table grid
             sql = """
-                SELECT id, name, email, first_name, last_name, mobile, role, status, 
+                SELECT id, name, email, password, first_name, last_name, mobile, role, status, 
                        created_at, updated_at, email_verified_at, last_login_at 
                 FROM users 
                 ORDER BY id DESC
@@ -101,7 +101,7 @@ def get_users():
             cursor.execute(sql)
             users = cursor.fetchall()
             
-            # Format dates into clean text strings for JSON serialization stability
+            # Format date items into text strings to protect JSON serialization loops
             for user in users:
                 for key in ['created_at', 'updated_at', 'email_verified_at', 'last_login_at']:
                     if user[key] and isinstance(user[key], datetime):
@@ -114,13 +114,13 @@ def get_users():
     finally:
         connection.close()
 
-# 🔑 API Route 3: User Login (POST) - FULLY CORRELATED TO YOUR DATA COLUMNS
+# 🔑 API Route 3: User Login (POST) - VERIFIES MOBILE & PASSWORD EXACTLY
 @app.post("/api/login")
 def login_user(login_data: UserLogin):
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            # Look up profiles targeting your 'mobile' column index
+            # Look up profiles targeting your exact 'mobile' column entry
             sql = """
                 SELECT id, name, email, password, first_name, last_name, mobile, role, status 
                 FROM users 
@@ -129,7 +129,7 @@ def login_user(login_data: UserLogin):
             cursor.execute(sql, (login_data.mobile,))
             user_record = cursor.fetchone()
 
-            # Verify profile existence tracking
+            # Verify mobile number match 
             if not user_record:
                 return {
                     "success": False,
@@ -143,7 +143,7 @@ def login_user(login_data: UserLogin):
                     "message": "Invalid credentials. Incorrect password."
                 }
 
-            # Programmatic logging utility: Record the current login timestamp string into TiDB
+            # Update the last login timestamps into TiDB on success
             update_sql = "UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = %s"
             cursor.execute(update_sql, (user_record["id"],))
             connection.commit()
