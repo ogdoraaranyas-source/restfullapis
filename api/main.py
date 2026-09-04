@@ -9,7 +9,8 @@ import pymysql
 # 👇 1. IMPORT THE ROUTER FROM YOUR CATEGORIES FILE
 # (This looks inside categories.py and extracts the "router" variable)
 from api.categories import router as categories_router
-#from api.uploadimage import router as upload_image_router
+from api.uploadimage import router as upload_image_router
+
 
 # 1. Initialize FastAPI (Must be named app for Vercel)
 app = FastAPI(title="E-Commerce Identity Engine")
@@ -25,8 +26,8 @@ app.add_middleware(
 
 # 👇 2. ATTACH THE ROUTER LAYER DYNAMICALLY RIGHT HERE
 # This registers all your category endpoints under the primary application stack
-app.include_router(categories_router, prefix="/api")
-#app.include_router(upload_image_router, prefix="/api")
+app.include_router(categories_router)
+app.include_router(upload_image_router)
 
 # 3. Secure TiDB Connection Pool Helper
 def get_db_connection():
