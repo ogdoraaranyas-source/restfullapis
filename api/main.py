@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status  # Added status import here
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import pymysql
@@ -35,6 +35,11 @@ class UserSignUp(BaseModel):
     name: str
     email: EmailStr  # Automatically rejects malformed emails (e.g., missing '@' or '.com')
     password: str
+
+# 5. Fixed Pydantic Schema Model for Login Input Validation
+class UserLogin(BaseModel):
+    phone_number: str 
+    password_hash: str  
 
 # --- ENDPOINTS ---
 
@@ -78,38 +83,30 @@ def get_users():
     finally:
         connection.close()
 
-
-
-class UserLogin(BaseModel):
-    # This matches the exact keys you are sending in your JSON payload
-    phone_number: str 
-    password_hash: str  
-
+# 🔑 API Route 3: User Login (POST) - FULLY FIXED
 @app.post("/api/login")
 def login_user(login_data: UserLogin):
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            # 1. UPDATED: Fetch target record using 'phone_number' and select 'password_hash' 
+            # 1. FIXED: Changed login_data.mobile to login_data.phone_number
             sql = "SELECT id, name, phone_number, password_hash FROM users WHERE phone_number = %s"
-            cursor.execute(sql, (login_data.mobile,))
+            cursor.execute(sql, (login_data.phone_number,))
             user_record = cursor.fetchone()
 
             # 2. Check if the user record exists in the database framework
             if not user_record:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, 
-                    detail="User not found"
-                )
+                return {
+                    "success": False,
+                    "message": "User not found"
+                }
 
-            # 3. UPDATED: Verify passwords matching your password_hash layout string 
-            # Note: If you are storing plain text under password_hash right now, keep line below.
-            # If using bcrypt hashes, replace line with: if not pwd_context.verify(login_data.password, user_record["password_hash"]):
-            if user_record["password_hash"] != login_data.password:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, 
-                    detail="Invalid credentials. Incorrect password."
-                )
+            # 3. FIXED: Changed login_data.password to login_data.password_hash
+            if user_record["password_hash"] != login_data.password_hash:
+                return {
+                    "success": False,
+                    "message": "Invalid credentials. Incorrect password."
+                }
 
             # 4. Successful authenticated payload configuration map
             return {
@@ -119,7 +116,6 @@ def login_user(login_data: UserLogin):
                     "id": user_record["id"],
                     "name": user_record["name"],
                     "phone_number": user_record["phone_number"]
-                    # Stripped out returning password string assets for secure network communication
                 }
             }
             
