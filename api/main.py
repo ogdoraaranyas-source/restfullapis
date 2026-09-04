@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, status  # Added status import here
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import pymysql
@@ -25,7 +25,7 @@ def get_db_connection():
             password=os.getenv("TIDB_PASSWORD"),
             database=os.getenv("TIDB_DB"),
             port=4000,
-            ssl={"ssl_disabled": False}  # Corrected character error to support secure hops
+            ssl={"ssl_disabled": False}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
@@ -33,17 +33,16 @@ def get_db_connection():
 # 4. Pydantic Schema Model for SaveUser Input Validation
 class UserSignUp(BaseModel):
     name: str
-    email: EmailStr  # Automatically rejects malformed emails (e.g., missing '@' or '.com')
+    email: EmailStr
     password: str
 
-# 5. Fixed Pydantic Schema Model for Login Input Validation
+# 5. FIXED: Schema updated to use 'password' instead of 'password_hash'
 class UserLogin(BaseModel):
     phone_number: str 
-    password_hash: str  
+    password: str  
 
 # --- ENDPOINTS ---
  
- # 👤 API Route 1: Save User (POST) - UPDATED FOR PASSWORD_HASH
 # 👤 API Route 1: Save User (POST)
 @app.post("/api/users")
 def save_user(user_data: UserSignUp):
@@ -55,10 +54,8 @@ def save_user(user_data: UserSignUp):
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Email already registered in system")
 
-            # 👇 FIXED: Use 'password' since your TiDB schema requires this explicit column label
+            # Database write matches the 'password' column mapping rules
             sql = "INSERT INTO users (name, email, password) VALUES (%s, %s, %s)"
-            
-            # Map input arguments cleanly to line parameters list
             cursor.execute(sql, (user_data.name, user_data.email, user_data.password))
             connection.commit()
             
@@ -68,7 +65,6 @@ def save_user(user_data: UserSignUp):
         raise HTTPException(status_code=500, detail=f"Database internal failure: {str(e)}")
     finally:
         connection.close()
- 
 
 # 👥 API Route 2: Get All Users (GET)
 @app.get("/api/users")
@@ -87,14 +83,14 @@ def get_users():
     finally:
         connection.close()
 
-# 🔑 API Route 3: User Login (POST) - FULLY FIXED
+# 🔑 API Route 3: User Login (POST) - FULLY UPDATED FOR 'password'
 @app.post("/api/login")
 def login_user(login_data: UserLogin):
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            # 1. FIXED: Changed login_data.mobile to login_data.phone_number
-            sql = "SELECT id, name, phone_number, password_hash FROM users WHERE phone_number = %s"
+            # 1. UPDATED: Fetch targeting the 'password' database field name
+            sql = "SELECT id, name, phone_number, password FROM users WHERE phone_number = %s"
             cursor.execute(sql, (login_data.phone_number,))
             user_record = cursor.fetchone()
 
@@ -105,8 +101,8 @@ def login_user(login_data: UserLogin):
                     "message": "User not found"
                 }
 
-            # 3. FIXED: Changed login_data.password to login_data.password_hash
-            if user_record["password_hash"] != login_data.password_hash:
+            # 3. UPDATED: Match properties using 'password' attributes directly
+            if user_record["password"] != login_data.password:
                 return {
                     "success": False,
                     "message": "Invalid credentials. Incorrect password."
