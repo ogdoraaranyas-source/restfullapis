@@ -4,3 +4,4 @@ pymysql
 cryptography
 pydantic
 email-validator
+Pillow
