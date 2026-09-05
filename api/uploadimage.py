@@ -38,37 +38,39 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 1. Open the image
+        # ✅ 1. Debug - print file info
+        print(f"Received file: {file.filename}")
+        print(f"Content type: {file.content_type}")
+        print(f"File size: {len(file_bytes)} bytes")
+        print(f"First 20 bytes: {file_bytes[:20].hex()}")
+        
+        # ✅ 2. Try to open as image - but DON'T fail if it's not
         try:
             img = Image.open(io.BytesIO(file_bytes))
             img.load()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
-        
-        # ✅ 2. Resize if needed
-        max_size = 1024
-        if img.width > max_size or img.height > max_size:
-            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            print(f"✅ Valid image detected: {img.format}")
             
-        # ✅ 3. Save as PNG (NOT WebP - this fixes the display issue)
-        output_buffer = io.BytesIO()
-        img.save(output_buffer, format="PNG", quality=95)  # PNG is universal
-        optimized_bytes = output_buffer.getvalue()
-        
-        # ✅ 4. Verify the file is valid BEFORE uploading
-        try:
-            test_img = Image.open(io.BytesIO(optimized_bytes))
-            test_img.load()
-            print(f"✅ Valid image detected: {test_img.format}, size: {len(optimized_bytes)} bytes")
+            # Process as image
+            max_size = 1024
+            if img.width > max_size or img.height > max_size:
+                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+                
+            output_buffer = io.BytesIO()
+            img.save(output_buffer, format="PNG", quality=95)
+            optimized_bytes = output_buffer.getvalue()
+            
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Image conversion failed: {str(e)}")
+            print(f"⚠️ Not a valid image: {e}")
+            # Fallback: Just upload the raw bytes
+            optimized_bytes = file_bytes
+            print("Uploading original file as-is")
         
-        # ✅ 5. Create filename with correct extension
+        # ✅ 3. Create filename
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
-        filename = f"img_{timestamp}_{base_filename}.png"  # Changed to .png
+        filename = f"img_{timestamp}_{base_filename}.png"
         
-        # ✅ 6. Upload to GitHub
+        # ✅ 4. Upload to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -95,8 +97,7 @@ async def upload_general_image(file: UploadFile = File(...)):
             github_file_url = response.json().get("content", {}).get("html_url", "")
         except:
             github_file_url = ""
-
-        # ✅ 7. Use Raw URL for display (works perfectly with PNG)
+        
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
@@ -104,9 +105,10 @@ async def upload_general_image(file: UploadFile = File(...)):
             "message": "File uploaded successfully!",
             "fileName": filename,
             "imageUrl": raw_url,
-            "thumbnail_url": raw_url,  # ✅ Use raw_url for guaranteed display
+            "thumbnail_url": raw_url,
             "size": len(optimized_bytes),
-            "githubUrl": github_file_url
+            "githubUrl": github_file_url,
+            "detected_format": img.format if 'img' in locals() else "unknown"
         }
         
     except HTTPException:
