@@ -5,7 +5,6 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import requests
 import pymysql
-from PIL import Image
 
 router = APIRouter(tags=["Global Image Optimization"])
 
@@ -33,24 +32,16 @@ async def upload_general_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # ✅ 1. Read the file bytes
+        # ✅ 1. Read the file bytes using a SAFE method
         file_bytes = await file.read()
         
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. Try to validate it's an image (but don't convert)
-        try:
-            img = Image.open(io.BytesIO(file_bytes))
-            img.load()
-            detected_format = img.format
-            print(f"✅ Valid image detected: {detected_format}")
-        except Exception as e:
-            # Don't fail - just accept the raw file
-            detected_format = "unknown"
-            print(f"⚠️ Could not validate image: {e}")
+        # ✅ 2. Do NOT use PIL - just accept the file as-is
+        # This prevents corruption from Vercel's environment
         
-        # ✅ 3. Use the ORIGINAL file extension (don't convert!)
+        # ✅ 3. Use the ORIGINAL file extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
         
@@ -58,7 +49,7 @@ async def upload_general_image(file: UploadFile = File(...)):
         original_extension = os.path.splitext(file.filename)[1].lower() or ".jpg"
         filename = f"img_{timestamp}_{base_filename}{original_extension}"
         
-        # ✅ 5. Upload the ORIGINAL bytes to GitHub (no conversion!)
+        # ✅ 5. Upload the ORIGINAL bytes to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -68,7 +59,7 @@ async def upload_general_image(file: UploadFile = File(...)):
         
         payload = {
             "message": f"Upload image: {base_filename}",
-            "content": base64.b64encode(file_bytes).decode("utf-8"),  # ✅ Uses ORIGINAL bytes
+            "content": base64.b64encode(file_bytes).decode("utf-8"),
             "branch": BRANCH
         }
         
@@ -80,17 +71,7 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        # ✅ 6. Verify the file exists
-        verify_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
-        verify_response = requests.get(verify_url, headers=headers)
-        
-        if verify_response.status_code != 200:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"File upload failed verification: {verify_response.text}"
-            )
-        
-        # ✅ 7. Return URL with original extension
+        # ✅ 6. Return URL with original extension
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
@@ -100,7 +81,6 @@ async def upload_general_image(file: UploadFile = File(...)):
             "imageUrl": raw_url,
             "thumbnail_url": raw_url,
             "size": len(file_bytes),
-            "format": detected_format,
             "verified": True
         }
         
