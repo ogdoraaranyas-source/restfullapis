@@ -57,11 +57,11 @@ async def upload_general_image(file: UploadFile = File(...)):
         timestamp = int(datetime.utcnow().timestamp())
         filename = f"img_{timestamp}_{base_filename}.webp"
         
-        # ✅ CORRECT: Use "token" for Classic tokens (NOT "Bearer")
+        # ✅ CORRECT: Use "token" for Classic tokens
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",  # ✅ For Classic Token
+            "Authorization": f"token {GITHUB_TOKEN}",
             "Accept": "application/vnd.github.v3+json"
         }
         
@@ -80,14 +80,16 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        # ✅ FIX: Safely get the GitHub URL - don't crash if 'content' is missing
         try:
             github_file_url = response.json().get("content", {}).get("html_url", "")
         except:
             github_file_url = ""
 
+        # ✅ CORRECT STATICALLY URL (with cdn. prefix)
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
-        cdn_url = f"https://statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
+        
+        # ✅ FIXED: Added "cdn." prefix
+        cdn_url = f"https://cdn.statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True,
