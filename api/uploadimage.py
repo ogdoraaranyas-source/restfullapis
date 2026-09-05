@@ -38,26 +38,37 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
+        # ✅ 1. Open the image
         try:
             img = Image.open(io.BytesIO(file_bytes))
             img.load()
-            
-            max_size = 1024
-            if img.width > max_size or img.height > max_size:
-                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                
-            output_buffer = io.BytesIO()
-            img.save(output_buffer, format="WEBP", quality=85)
-            optimized_bytes = output_buffer.getvalue()
-            
         except Exception as e:
-            optimized_bytes = file_bytes
+            raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
         
+        # ✅ 2. Resize if needed
+        max_size = 1024
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            
+        # ✅ 3. Save as PNG (NOT WebP - this fixes the display issue)
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format="PNG", quality=95)  # PNG is universal
+        optimized_bytes = output_buffer.getvalue()
+        
+        # ✅ 4. Verify the file is valid BEFORE uploading
+        try:
+            test_img = Image.open(io.BytesIO(optimized_bytes))
+            test_img.load()
+            print(f"✅ Valid image detected: {test_img.format}, size: {len(optimized_bytes)} bytes")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Image conversion failed: {str(e)}")
+        
+        # ✅ 5. Create filename with correct extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
-        filename = f"img_{timestamp}_{base_filename}.webp"
+        filename = f"img_{timestamp}_{base_filename}.png"  # Changed to .png
         
-        # ✅ CORRECT: Use "token" for Classic tokens
+        # ✅ 6. Upload to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -85,18 +96,15 @@ async def upload_general_image(file: UploadFile = File(...)):
         except:
             github_file_url = ""
 
-        # ✅ CORRECT STATICALLY URL (with cdn. prefix)
+        # ✅ 7. Use Raw URL for display (works perfectly with PNG)
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
-        
-        # ✅ FIXED: Added "cdn." prefix
-        cdn_url = f"https://cdn.statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True,
             "message": "File uploaded successfully!",
             "fileName": filename,
             "imageUrl": raw_url,
-            "thumbnail_url": cdn_url,
+            "thumbnail_url": raw_url,  # ✅ Use raw_url for guaranteed display
             "size": len(optimized_bytes),
             "githubUrl": github_file_url
         }
