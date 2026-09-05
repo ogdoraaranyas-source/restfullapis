@@ -32,24 +32,19 @@ async def upload_general_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # ✅ 1. Read the file bytes using a SAFE method
+        # ✅ 1. Read the file bytes
         file_bytes = await file.read()
         
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. Do NOT use PIL - just accept the file as-is
-        # This prevents corruption from Vercel's environment
-        
-        # ✅ 3. Use the ORIGINAL file extension
+        # ✅ 2. Keep the original file extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
-        
-        # ✅ 4. Keep the original file extension
         original_extension = os.path.splitext(file.filename)[1].lower() or ".jpg"
         filename = f"img_{timestamp}_{base_filename}{original_extension}"
         
-        # ✅ 5. Upload the ORIGINAL bytes to GitHub
+        # ✅ 3. Upload to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -71,15 +66,20 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        # ✅ 6. Return URL with original extension
+        # ✅ 4. RETURN CDN URL THAT DISPLAYS IMAGE (NOT raw.githubusercontent.com)
+        # Use jsDelivr CDN - This displays images in the browser!
+        cdn_url = f"https://cdn.jsdelivr.net/gh/{REPO_OWNER}/{REPO_NAME}@{BRANCH}/categoryimages/{filename}"
+        
+        # ✅ Also return raw URL as backup (but this downloads)
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True,
             "message": "File uploaded successfully!",
             "fileName": filename,
-            "imageUrl": raw_url,
-            "thumbnail_url": raw_url,
+            "imageUrl": cdn_url,  # ✅ THIS WILL DISPLAY THE IMAGE
+            "thumbnail_url": cdn_url,  # ✅ THIS WILL DISPLAY THE IMAGE
+            "raw_url": raw_url,
             "size": len(file_bytes),
             "verified": True
         }
