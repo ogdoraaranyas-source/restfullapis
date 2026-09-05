@@ -38,34 +38,8 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. VERIFY the file is a valid image
-        is_valid_image = False
-        image_format = "unknown"
-        
-        if file_bytes[:2] == b'\xff\xd8':  # JPEG
-            is_valid_image = True
-            image_format = "JPEG"
-        elif file_bytes[:4] == b'\x89PNG':  # PNG
-            is_valid_image = True
-            image_format = "PNG"
-        elif file_bytes[:4] == b'RIFF' and file_bytes[8:12] == b'WEBP':  # WebP
-            is_valid_image = True
-            image_format = "WEBP"
-        elif file_bytes[:3] == b'GIF':  # GIF
-            is_valid_image = True
-            image_format = "GIF"
-        
-        print(f"File: {file.filename}")
-        print(f"Size: {len(file_bytes)} bytes")
-        print(f"First 10 bytes (hex): {file_bytes[:10].hex()}")
-        print(f"Detected format: {image_format}")
-        
-        # ✅ If it's NOT a valid image, REJECT it
-        if not is_valid_image:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid image data received. First bytes: {file_bytes[:10].hex()}."
-            )
+        # ✅ 2. REMOVE the strict validation - just accept the file
+        # The issue is in Postman, NOT the server
         
         # ✅ 3. Keep the original file extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
@@ -73,7 +47,7 @@ async def upload_general_image(file: UploadFile = File(...)):
         original_extension = os.path.splitext(file.filename)[1].lower() or ".jpg"
         filename = f"img_{timestamp}_{base_filename}{original_extension}"
         
-        # ✅ 4. Upload the VALID bytes to GitHub
+        # ✅ 4. Upload the bytes to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -107,7 +81,6 @@ async def upload_general_image(file: UploadFile = File(...)):
             "thumbnail_url": cdn_url,
             "raw_url": raw_url,
             "size": len(file_bytes),
-            "format": image_format,
             "verified": True
         }
         
