@@ -38,19 +38,11 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 1. Debug - print file info
-        print(f"Received file: {file.filename}")
-        print(f"Content type: {file.content_type}")
-        print(f"File size: {len(file_bytes)} bytes")
-        print(f"First 20 bytes: {file_bytes[:20].hex()}")
-        
-        # ✅ 2. Try to open as image - but DON'T fail if it's not
+        # ✅ 1. Process image
         try:
             img = Image.open(io.BytesIO(file_bytes))
             img.load()
-            print(f"✅ Valid image detected: {img.format}")
             
-            # Process as image
             max_size = 1024
             if img.width > max_size or img.height > max_size:
                 img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
@@ -60,17 +52,14 @@ async def upload_general_image(file: UploadFile = File(...)):
             optimized_bytes = output_buffer.getvalue()
             
         except Exception as e:
-            print(f"⚠️ Not a valid image: {e}")
-            # Fallback: Just upload the raw bytes
             optimized_bytes = file_bytes
-            print("Uploading original file as-is")
         
-        # ✅ 3. Create filename
+        # ✅ 2. Create filename
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
         filename = f"img_{timestamp}_{base_filename}.png"
         
-        # ✅ 4. Upload to GitHub
+        # ✅ 3. Upload to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -87,17 +76,22 @@ async def upload_general_image(file: UploadFile = File(...)):
         response = requests.put(target_url, json=payload, headers=headers)
         
         if response.status_code not in [200, 201]:
-            print(f"GitHub response: {response.status_code} - {response.text}")
             raise HTTPException(
                 status_code=500, 
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        try:
-            github_file_url = response.json().get("content", {}).get("html_url", "")
-        except:
-            github_file_url = ""
+        # ✅ 4. Verify the file exists on GitHub
+        verify_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
+        verify_response = requests.get(verify_url, headers=headers)
         
+        if verify_response.status_code != 200:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"File upload failed verification: {verify_response.text}"
+            )
+        
+        # ✅ 5. Return correct URL
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
@@ -107,8 +101,7 @@ async def upload_general_image(file: UploadFile = File(...)):
             "imageUrl": raw_url,
             "thumbnail_url": raw_url,
             "size": len(optimized_bytes),
-            "githubUrl": github_file_url,
-            "detected_format": img.format if 'img' in locals() else "unknown"
+            "verified": True
         }
         
     except HTTPException:
