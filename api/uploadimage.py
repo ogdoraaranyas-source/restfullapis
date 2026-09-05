@@ -38,13 +38,42 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. Keep the original file extension
+        # ✅ 2. VERIFY the file is a valid image by checking magic bytes
+        is_valid_image = False
+        image_format = "unknown"
+        
+        if file_bytes[:2] == b'\xff\xd8':  # JPEG
+            is_valid_image = True
+            image_format = "JPEG"
+        elif file_bytes[:4] == b'\x89PNG':  # PNG
+            is_valid_image = True
+            image_format = "PNG"
+        elif file_bytes[:4] == b'RIFF' and file_bytes[8:12] == b'WEBP':  # WebP
+            is_valid_image = True
+            image_format = "WEBP"
+        elif file_bytes[:3] == b'GIF':  # GIF
+            is_valid_image = True
+            image_format = "GIF"
+        
+        print(f"File: {file.filename}")
+        print(f"Size: {len(file_bytes)} bytes")
+        print(f"First 10 bytes (hex): {file_bytes[:10].hex()}")
+        print(f"Detected format: {image_format}")
+        
+        # ✅ If it's NOT a valid image, REJECT it before uploading to GitHub
+        if not is_valid_image:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid image data received. First bytes: {file_bytes[:10].hex()}. Please check the file."
+            )
+        
+        # ✅ 3. Keep the original file extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
         original_extension = os.path.splitext(file.filename)[1].lower() or ".jpg"
         filename = f"img_{timestamp}_{base_filename}{original_extension}"
         
-        # ✅ 3. Upload to GitHub
+        # ✅ 4. Upload the VALID bytes to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -66,21 +95,19 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        # ✅ 4. RETURN CDN URL THAT DISPLAYS IMAGE (NOT raw.githubusercontent.com)
-        # Use jsDelivr CDN - This displays images in the browser!
+        # ✅ 5. Return CDN URL
         cdn_url = f"https://cdn.jsdelivr.net/gh/{REPO_OWNER}/{REPO_NAME}@{BRANCH}/categoryimages/{filename}"
-        
-        # ✅ Also return raw URL as backup (but this downloads)
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True,
             "message": "File uploaded successfully!",
             "fileName": filename,
-            "imageUrl": cdn_url,  # ✅ THIS WILL DISPLAY THE IMAGE
-            "thumbnail_url": cdn_url,  # ✅ THIS WILL DISPLAY THE IMAGE
+            "imageUrl": cdn_url,
+            "thumbnail_url": cdn_url,
             "raw_url": raw_url,
             "size": len(file_bytes),
+            "format": image_format,
             "verified": True
         }
         
