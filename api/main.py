@@ -25,7 +25,6 @@ app.add_middleware(
 app.include_router(categories_router, prefix="/api")
 app.include_router(upload_image_router, prefix="/api")
 
-# ✅ ADD THIS ROOT ENDPOINT
 @app.get("/")
 def root():
     return {"message": "API is working!", "status": "healthy"}
