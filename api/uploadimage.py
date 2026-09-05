@@ -29,7 +29,7 @@ def get_db_connection():
 @router.post("/uploadimage")
 async def upload_general_image(file: UploadFile = File(...)):
     if not GITHUB_TOKEN:
-        raise HTTPException(status_code=500, detail="Vercel Environment Variable 'GITHUB_TOKEN' is missing.")
+        raise HTTPException(status_code=500, detail="Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
         # ✅ 1. Read the file bytes
@@ -38,7 +38,7 @@ async def upload_general_image(file: UploadFile = File(...)):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. VERIFY the file is a valid image by checking magic bytes
+        # ✅ 2. VERIFY the file is a valid image
         is_valid_image = False
         image_format = "unknown"
         
@@ -60,11 +60,11 @@ async def upload_general_image(file: UploadFile = File(...)):
         print(f"First 10 bytes (hex): {file_bytes[:10].hex()}")
         print(f"Detected format: {image_format}")
         
-        # ✅ If it's NOT a valid image, REJECT it before uploading to GitHub
+        # ✅ If it's NOT a valid image, REJECT it
         if not is_valid_image:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid image data received. First bytes: {file_bytes[:10].hex()}. Please check the file."
+                detail=f"Invalid image data received. First bytes: {file_bytes[:10].hex()}."
             )
         
         # ✅ 3. Keep the original file extension

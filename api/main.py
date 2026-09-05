@@ -30,6 +30,11 @@ app.add_middleware(
 app.include_router(categories_router, prefix="/api")
 app.include_router(upload_image_router, prefix="/api")
 
+# ✅ ADD THIS ROOT ENDPOINT
+@app.get("/")
+def root():
+    return {"message": "API is working!", "status": "healthy"}
+
 # Database connection helper
 def get_db_connection():
     try:
@@ -158,6 +163,3 @@ def login_user(login_data: UserLogin):
         raise HTTPException(status_code=500, detail=f"Database internal operational failure: {str(e)}")
     finally:
         connection.close()
-
-from mangum import Mangum
-handler = Mangum(app)        
