@@ -8,6 +8,8 @@ import pymysql
 # Import routers
 from api.categories import router as categories_router
 from api.uploadimage import router as upload_image_router
+from api.products import router as products_router
+
 
 # Initialize FastAPI
 app = FastAPI(title="E-Commerce Identity Engine")  # ✅ THIS IS THE 'app' VARIABLE!
@@ -24,6 +26,7 @@ app.add_middleware(
 # Include routers
 app.include_router(categories_router, prefix="/api")
 app.include_router(upload_image_router, prefix="/api")
+app.include_router(products_router, prefix="/api")
 
 @app.get("/")
 def root():
