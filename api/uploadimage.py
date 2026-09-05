@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File
 import requests
 import pymysql
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 router = APIRouter(tags=["Global Image Optimization"])
 
@@ -57,12 +57,12 @@ async def upload_general_image(file: UploadFile = File(...)):
         timestamp = int(datetime.utcnow().timestamp())
         filename = f"img_{timestamp}_{base_filename}.webp"
         
+        # ✅ CORRECT: Use "token" for Classic tokens (NOT "Bearer")
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
-            "Authorization": f"Bearer {GITHUB_TOKEN}",  
-            "Accept": "application/vnd.github.v3+json",
-            "X-GitHub-Api-Version": "2022-11-28"
+            "Authorization": f"token {GITHUB_TOKEN}",  # ✅ For Classic Token
+            "Accept": "application/vnd.github.v3+json"
         }
         
         payload = {
@@ -73,17 +73,21 @@ async def upload_general_image(file: UploadFile = File(...)):
         
         response = requests.put(target_url, json=payload, headers=headers)
         
-        if response.status_code not in:
+        if response.status_code not in [200, 201]:
             print(f"GitHub response: {response.status_code} - {response.text}")
             raise HTTPException(
                 status_code=500, 
                 detail=f"GitHub upload failed: {response.text}"
             )
         
+        # ✅ FIX: Safely get the GitHub URL - don't crash if 'content' is missing
+        try:
+            github_file_url = response.json().get("content", {}).get("html_url", "")
+        except:
+            github_file_url = ""
+
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
-        
-        # 👇 FIXED FOR PRODUCTION: Added the official 'cdn.' prefix to resolve static delivery pathways
-        cdn_url = f"https://cdn.statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
+        cdn_url = f"https://statically.io/gh/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
         return {
             "success": True,
@@ -92,7 +96,7 @@ async def upload_general_image(file: UploadFile = File(...)):
             "imageUrl": raw_url,
             "thumbnail_url": cdn_url,
             "size": len(optimized_bytes),
-            "githubUrl": response.json().get("content", {}).get("html_url", "")
+            "githubUrl": github_file_url
         }
         
     except HTTPException:
