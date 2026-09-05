@@ -32,21 +32,28 @@ async def upload_general_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Environment Variable 'GITHUB_TOKEN' is missing.")
 
     try:
-        # ✅ 1. Read the file bytes - ACCEPT ANYTHING
+        # ✅ 1. Read the file bytes
         file_bytes = await file.read()
         
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded file payload is empty.")
         
-        # ✅ 2. REMOVE ALL VALIDATION - Just accept the raw bytes and upload them
+        # ✅ 2. STRIP THE BOM (Byte Order Mark) added by Postman!
+        if file_bytes[:3] == b'\xef\xbb\xbf':
+            file_bytes = file_bytes[3:]  # Remove UTF-8 BOM
         
-        # ✅ 3. Keep the original file extension
+        if file_bytes[:3] == b'\xef\xbf\xbd':
+            file_bytes = file_bytes[3:]  # Remove corrupted BOM
+        
+        # ✅ 3. REMOVE ALL VALIDATION - Just accept the bytes
+        
+        # ✅ 4. Keep the original file extension
         base_filename = os.path.splitext(file.filename)[0].replace(' ', '_') or "image"
         timestamp = int(datetime.utcnow().timestamp())
         original_extension = os.path.splitext(file.filename)[1].lower() or ".jpg"
         filename = f"img_{timestamp}_{base_filename}{original_extension}"
         
-        # ✅ 4. Upload to GitHub - No questions asked!
+        # ✅ 5. Upload to GitHub
         target_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/categoryimages/{filename}"
         
         headers = {
@@ -68,7 +75,7 @@ async def upload_general_image(file: UploadFile = File(...)):
                 detail=f"GitHub upload failed: {response.text}"
             )
         
-        # ✅ 5. Return CDN URL
+        # ✅ 6. Return CDN URL
         cdn_url = f"https://cdn.jsdelivr.net/gh/{REPO_OWNER}/{REPO_NAME}@{BRANCH}/categoryimages/{filename}"
         raw_url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/categoryimages/{filename}"
         
