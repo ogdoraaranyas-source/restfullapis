@@ -5,10 +5,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ✅ Your Vercel project URL (adjust if different)
 VERCEL_DOMAIN = "https://restfullapis-cdn.vercel.app"
 
-# ✅ Paths to purge (these are the cached API endpoints)
 CACHE_PATHS = [
     "/api/products/top",
     "/api/products",
@@ -18,10 +16,7 @@ CACHE_PATHS = [
 
 
 def purge_vercel_cache(paths: list = None):
-    """
-    Purge Vercel CDN cache for specific paths.
-    Call this after any create/update/delete operation.
-    """
+    """Purge Vercel CDN cache for specific paths."""
     token = os.getenv("VERCEL_TOKEN")
     if not token:
         logger.warning("VERCEL_TOKEN not set — skipping cache purge")

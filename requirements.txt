@@ -5,6 +5,5 @@ cryptography
 pydantic
 email-validator
 Pillow
-requests
+requests           # ✅ MUST BE HERE
 python-multipart
-mangum

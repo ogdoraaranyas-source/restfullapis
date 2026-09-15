@@ -1,4 +1,5 @@
 import os
+import threading                                     # ✅ Added for async purge
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
@@ -6,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 import pymysql
 
-from api.cache_helper import purge_vercel_cache   # ✅ Import purge helper
+from api.cache_helper import purge_vercel_cache
 
 router = APIRouter(tags=["Products Management"])
 
@@ -23,6 +24,18 @@ def get_db_connection():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
+
+
+def purge_async(paths):
+    """
+    Purge Vercel CDN cache in a background thread.
+    This prevents the purge call from blocking the API response.
+    """
+    threading.Thread(
+        target=purge_vercel_cache,
+        args=(paths,),
+        daemon=True
+    ).start()
 
 
 # ================================
@@ -49,7 +62,7 @@ class ProductUpdate(BaseModel):
 
 
 # ================================
-# 1. POST /products (Create) — Purges cache
+# 1. POST /products (Create) — Async purge
 # ================================
 @router.post("/products")
 def create_product(product_data: ProductCreate):
@@ -77,8 +90,8 @@ def create_product(product_data: ProductCreate):
 
             product_id = cursor.lastrowid
 
-        # ✅ Purge Vercel CDN cache so new product shows immediately
-        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+        # ✅ Non-blocking background purge
+        purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {
             "success": True,
@@ -218,7 +231,7 @@ def get_product(product_id: int):
 
 
 # ================================
-# 5. PUT /products/{product_id} (Update) — Purges cache
+# 5. PUT /products/{product_id} (Update) — Async purge
 # ================================
 @router.put("/products/{product_id}")
 def update_product(product_id: int, product_data: ProductUpdate):
@@ -263,8 +276,8 @@ def update_product(product_id: int, product_data: ProductUpdate):
             cursor.execute(sql, tuple(params))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+        # ✅ Non-blocking background purge
+        purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {"success": True, "message": "Product updated successfully!"}
     except pymysql.MySQLError as e:
@@ -274,7 +287,7 @@ def update_product(product_id: int, product_data: ProductUpdate):
 
 
 # ================================
-# 6. DELETE /products/{product_id} (Delete) — Purges cache
+# 6. DELETE /products/{product_id} (Delete) — Async purge
 # ================================
 @router.delete("/products/{product_id}")
 def delete_product(product_id: int):
@@ -288,8 +301,8 @@ def delete_product(product_id: int):
             cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+        # ✅ Non-blocking background purge
+        purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {"success": True, "message": "Product deleted successfully!"}
     except pymysql.MySQLError as e:
