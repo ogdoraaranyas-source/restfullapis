@@ -1,9 +1,12 @@
 import os
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import pymysql
+
+from api.cache_helper import purge_vercel_cache   # ✅ Import purge helper
 
 router = APIRouter(tags=["Products Management"])
 
@@ -46,7 +49,7 @@ class ProductUpdate(BaseModel):
 
 
 # ================================
-# 1. POST /products (Create)
+# 1. POST /products (Create) — Purges cache
 # ================================
 @router.post("/products")
 def create_product(product_data: ProductCreate):
@@ -74,12 +77,15 @@ def create_product(product_data: ProductCreate):
 
             product_id = cursor.lastrowid
 
-            return {
-                "success": True,
-                "message": "Product created successfully!",
-                "product_id": product_id,
-                "display_id": new_display_id
-            }
+        # ✅ Purge Vercel CDN cache so new product shows immediately
+        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+
+        return {
+            "success": True,
+            "message": "Product created successfully!",
+            "product_id": product_id,
+            "display_id": new_display_id
+        }
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
@@ -87,7 +93,7 @@ def create_product(product_data: ProductCreate):
 
 
 # ================================
-# 2. GET /products (All)
+# 2. GET /products (All) — Cached
 # ================================
 @router.get("/products")
 def get_all_products():
@@ -95,7 +101,8 @@ def get_all_products():
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
-                SELECT p.display_id, p.id, p.category_id, c.name as category_name, p.name, p.description, 
+                SELECT p.display_id, p.id, p.category_id, c.name as category_name, p.name, 
+                       SUBSTRING(p.description, 1, 150) as description,
                        p.price, p.stock, p.img_url, p.status, p.created_at, p.updated_at
                 FROM products p
                 LEFT JOIN categories c ON p.category_id = c.id
@@ -109,7 +116,12 @@ def get_all_products():
                     if product.get(key) and isinstance(product[key], datetime):
                         product[key] = product[key].strftime('%Y-%m-%d %H:%M:%S')
 
-        return {"success": True, "products": products}
+        return JSONResponse(
+            content={"success": True, "products": products},
+            headers={
+                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+            }
+        )
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
@@ -117,7 +129,7 @@ def get_all_products():
 
 
 # ================================
-# ✅ 3. GET /products/top (MUST be before /{product_id})
+# ✅ 3. GET /products/top (MUST be before /{product_id}) — Cached
 # ================================
 @router.get("/products/top")
 def get_top_products(limit: int = Query(5, ge=1, le=20)):
@@ -135,7 +147,8 @@ def get_top_products(limit: int = Query(5, ge=1, le=20)):
                 cursor.execute("""
                     SELECT 
                         p.display_id, p.id, p.category_id,
-                        p.name, p.description,
+                        p.name, 
+                        SUBSTRING(p.description, 1, 150) as description,
                         p.price, p.stock, p.img_url, p.status,
                         p.created_at, p.updated_at
                     FROM products p
@@ -155,12 +168,17 @@ def get_top_products(limit: int = Query(5, ge=1, le=20)):
                 if cat.get('created_at') and isinstance(cat['created_at'], datetime):
                     cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
 
-        return {
-            "success": True,
-            "limit_per_category": limit,
-            "total_categories": len(categories),
-            "dashboard": categories
-        }
+        return JSONResponse(
+            content={
+                "success": True,
+                "limit_per_category": limit,
+                "total_categories": len(categories),
+                "dashboard": categories
+            },
+            headers={
+                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+            }
+        )
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
@@ -200,7 +218,7 @@ def get_product(product_id: int):
 
 
 # ================================
-# 5. PUT /products/{product_id} (Update)
+# 5. PUT /products/{product_id} (Update) — Purges cache
 # ================================
 @router.put("/products/{product_id}")
 def update_product(product_id: int, product_data: ProductUpdate):
@@ -244,7 +262,11 @@ def update_product(product_id: int, product_data: ProductUpdate):
 
             cursor.execute(sql, tuple(params))
             connection.commit()
-            return {"success": True, "message": "Product updated successfully!"}
+
+        # ✅ Purge Vercel CDN cache
+        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+
+        return {"success": True, "message": "Product updated successfully!"}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
@@ -252,7 +274,7 @@ def update_product(product_id: int, product_data: ProductUpdate):
 
 
 # ================================
-# 6. DELETE /products/{product_id} (Delete)
+# 6. DELETE /products/{product_id} (Delete) — Purges cache
 # ================================
 @router.delete("/products/{product_id}")
 def delete_product(product_id: int):
@@ -265,7 +287,11 @@ def delete_product(product_id: int):
 
             cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
             connection.commit()
-            return {"success": True, "message": "Product deleted successfully!"}
+
+        # ✅ Purge Vercel CDN cache
+        purge_vercel_cache(["/api/products/top", "/api/products", "/api/categories"])
+
+        return {"success": True, "message": "Product deleted successfully!"}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
