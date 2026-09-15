@@ -1,11 +1,15 @@
 import os
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import pymysql
 
+from api.cache_helper import purge_vercel_cache   # ✅ Import purge helper
+
 router = APIRouter(tags=["Ads Management"])
+
 
 def get_db_connection():
     try:
@@ -20,17 +24,22 @@ def get_db_connection():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database link failed: {str(e)}")
 
+
 class AdCreate(BaseModel):
     thumburl: Optional[str] = None
     categoryid: int
     categoryname: str
+
 
 class AdUpdate(BaseModel):
     thumburl: Optional[str] = None
     categoryid: Optional[int] = None
     categoryname: Optional[str] = None
 
-# 📥 1. Create Ad
+
+# ================================
+# 📥 1. Create Ad — Purges cache
+# ================================
 @router.post("/ads")
 def create_ad(ad_data: AdCreate):
     connection = get_db_connection()
@@ -45,14 +54,24 @@ def create_ad(ad_data: AdCreate):
             ))
             connection.commit()
             ad_id = cursor.lastrowid
-            
-            return {"success": True, "message": "Ad created successfully!", "ad_id": ad_id}
+
+        # ✅ Purge Vercel CDN cache
+        purge_vercel_cache(["/api/ads"])
+
+        return {
+            "success": True,
+            "message": "Ad created successfully!",
+            "ad_id": ad_id
+        }
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
 
-# 📋 2. Get All Ads
+
+# ================================
+# 📋 2. Get All Ads — Cached
+# ================================
 @router.get("/ads")
 def get_all_ads():
     connection = get_db_connection()
@@ -61,18 +80,26 @@ def get_all_ads():
             sql = "SELECT id, thumburl, categoryid, categoryname, created_at FROM ads ORDER BY id ASC"
             cursor.execute(sql)
             ads = cursor.fetchall()
-            
+
             for ad in ads:
                 if ad.get('created_at') and isinstance(ad['created_at'], datetime):
                     ad['created_at'] = ad['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-                    
-        return {"success": True, "ads": ads}
+
+        return JSONResponse(
+            content={"success": True, "ads": ads},
+            headers={
+                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+            }
+        )
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
 
+
+# ================================
 # 🔍 3. Get Single Ad
+# ================================
 @router.get("/ads/{ad_id}")
 def get_ad(ad_id: int):
     connection = get_db_connection()
@@ -81,20 +108,23 @@ def get_ad(ad_id: int):
             sql = "SELECT id, thumburl, categoryid, categoryname, created_at FROM ads WHERE id = %s"
             cursor.execute(sql, (ad_id,))
             ad = cursor.fetchone()
-            
+
             if not ad:
                 raise HTTPException(status_code=404, detail="Ad not found")
-            
+
             if ad.get('created_at') and isinstance(ad['created_at'], datetime):
                 ad['created_at'] = ad['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-                    
+
         return {"success": True, "ad": ad}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
 
-# 📝 4. Update Ad
+
+# ================================
+# 📝 4. Update Ad — Purges cache
+# ================================
 @router.put("/ads/{ad_id}")
 def update_ad(ad_id: int, ad_data: AdUpdate):
     connection = get_db_connection()
@@ -106,7 +136,7 @@ def update_ad(ad_id: int, ad_data: AdUpdate):
 
             update_fields = []
             params = []
-            
+
             if ad_data.thumburl is not None:
                 update_fields.append("thumburl = %s")
                 params.append(ad_data.thumburl)
@@ -122,16 +152,23 @@ def update_ad(ad_id: int, ad_data: AdUpdate):
 
             params.append(ad_id)
             sql = f"UPDATE ads SET {', '.join(update_fields)} WHERE id = %s"
-            
+
             cursor.execute(sql, tuple(params))
             connection.commit()
-            return {"success": True, "message": "Ad updated successfully!"}
+
+        # ✅ Purge Vercel CDN cache
+        purge_vercel_cache(["/api/ads"])
+
+        return {"success": True, "message": "Ad updated successfully!"}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
 
-# ❌ 5. Delete Ad
+
+# ================================
+# ❌ 5. Delete Ad — Purges cache
+# ================================
 @router.delete("/ads/{ad_id}")
 def delete_ad(ad_id: int):
     connection = get_db_connection()
@@ -143,7 +180,11 @@ def delete_ad(ad_id: int):
 
             cursor.execute("DELETE FROM ads WHERE id = %s", (ad_id,))
             connection.commit()
-            return {"success": True, "message": "Ad deleted successfully!"}
+
+        # ✅ Purge Vercel CDN cache
+        purge_vercel_cache(["/api/ads"])
+
+        return {"success": True, "message": "Ad deleted successfully!"}
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
