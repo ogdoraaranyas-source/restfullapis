@@ -197,3 +197,54 @@ def delete_product(product_id: int):
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
+
+ 
+
+@router.get("/products/top")
+def get_top_products(limit: int = Query(5, ge=1, le=20)):
+    connection = get_db_connection()
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute("""
+                SELECT id, name, thumbnail_url, created_at
+                FROM categories
+                ORDER BY id DESC
+            """)
+            categories = cursor.fetchall()
+
+            for cat in categories:
+                cursor.execute("""
+                    SELECT 
+                        p.display_id, p.id, p.category_id,
+                        p.name, p.description,
+                        p.price, p.stock, p.img_url, p.status,
+                        p.created_at, p.updated_at
+                    FROM products p
+                    WHERE p.category_id = %s AND p.status = 'active'
+                    ORDER BY p.display_id ASC
+                    LIMIT %s
+                """, (cat['id'], limit))
+                products = cursor.fetchall()
+
+                for product in products:
+                    for key in ['created_at', 'updated_at']:
+                        if product.get(key) and isinstance(product[key], datetime):
+                            product[key] = product[key].strftime('%Y-%m-%d %H:%M:%S')
+
+                cat['products'] = products
+
+                if cat.get('created_at') and isinstance(cat['created_at'], datetime):
+                    cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+        return {
+            "success": True,
+            "limit_per_category": limit,
+            "total_categories": len(categories),
+            "dashboard": categories
+        }
+    except pymysql.MySQLError as e:
+        raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
+    finally:
+        connection.close()
+
+
