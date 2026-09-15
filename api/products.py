@@ -1,6 +1,7 @@
 import os
-import threading                                     # ✅ Added for async purge
+import threading
 from datetime import datetime
+from decimal import Decimal                          # ✅ Added
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -27,10 +28,7 @@ def get_db_connection():
 
 
 def purge_async(paths):
-    """
-    Purge Vercel CDN cache in a background thread.
-    This prevents the purge call from blocking the API response.
-    """
+    """Purge Vercel cache in a background thread (non-blocking)."""
     threading.Thread(
         target=purge_vercel_cache,
         args=(paths,),
@@ -38,9 +36,19 @@ def purge_async(paths):
     ).start()
 
 
-# ================================
-# Request models
-# ================================
+# ✅ NEW: Convert DB row to JSON-safe dict
+def clean_row(row: dict) -> dict:
+    clean = {}
+    for key, value in row.items():
+        if isinstance(value, Decimal):
+            clean[key] = float(value)
+        elif isinstance(value, datetime):
+            clean[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            clean[key] = value
+    return clean
+
+
 class ProductCreate(BaseModel):
     category_id: int
     name: str
@@ -62,7 +70,7 @@ class ProductUpdate(BaseModel):
 
 
 # ================================
-# 1. POST /products (Create) — Async purge
+# 1. POST /products
 # ================================
 @router.post("/products")
 def create_product(product_data: ProductCreate):
@@ -87,10 +95,8 @@ def create_product(product_data: ProductCreate):
                 product_data.status
             ))
             connection.commit()
-
             product_id = cursor.lastrowid
 
-        # ✅ Non-blocking background purge
         purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {
@@ -106,7 +112,7 @@ def create_product(product_data: ProductCreate):
 
 
 # ================================
-# 2. GET /products (All) — Cached
+# 2. GET /products
 # ================================
 @router.get("/products")
 def get_all_products():
@@ -124,10 +130,8 @@ def get_all_products():
             cursor.execute(sql)
             products = cursor.fetchall()
 
-            for product in products:
-                for key in ['created_at', 'updated_at']:
-                    if product.get(key) and isinstance(product[key], datetime):
-                        product[key] = product[key].strftime('%Y-%m-%d %H:%M:%S')
+            # ✅ Convert Decimal/datetime
+            products = [clean_row(p) for p in products]
 
         return JSONResponse(
             content={"success": True, "products": products},
@@ -142,7 +146,7 @@ def get_all_products():
 
 
 # ================================
-# ✅ 3. GET /products/top (MUST be before /{product_id}) — Cached
+# 3. GET /products/top  (BEFORE /{product_id})
 # ================================
 @router.get("/products/top")
 def get_top_products(limit: int = Query(5, ge=1, le=20)):
@@ -171,15 +175,12 @@ def get_top_products(limit: int = Query(5, ge=1, le=20)):
                 """, (cat['id'], limit))
                 products = cursor.fetchall()
 
-                for product in products:
-                    for key in ['created_at', 'updated_at']:
-                        if product.get(key) and isinstance(product[key], datetime):
-                            product[key] = product[key].strftime('%Y-%m-%d %H:%M:%S')
+                # ✅ Convert each product row
+                cat['products'] = [clean_row(p) for p in products]
 
-                cat['products'] = products
-
-                if cat.get('created_at') and isinstance(cat['created_at'], datetime):
-                    cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                # ✅ Convert category row
+                cat_clean = clean_row(cat)
+                cat.update(cat_clean)
 
         return JSONResponse(
             content={
@@ -199,7 +200,7 @@ def get_top_products(limit: int = Query(5, ge=1, le=20)):
 
 
 # ================================
-# 4. GET /products/{product_id} (Single)
+# 4. GET /products/{product_id}
 # ================================
 @router.get("/products/{product_id}")
 def get_product(product_id: int):
@@ -219,9 +220,7 @@ def get_product(product_id: int):
             if not product:
                 raise HTTPException(status_code=404, detail="Product not found")
 
-            for key in ['created_at', 'updated_at']:
-                if product.get(key) and isinstance(product[key], datetime):
-                    product[key] = product[key].strftime('%Y-%m-%d %H:%M:%S')
+            product = clean_row(product)
 
         return {"success": True, "product": product}
     except pymysql.MySQLError as e:
@@ -231,7 +230,7 @@ def get_product(product_id: int):
 
 
 # ================================
-# 5. PUT /products/{product_id} (Update) — Async purge
+# 5. PUT /products/{product_id}
 # ================================
 @router.put("/products/{product_id}")
 def update_product(product_id: int, product_data: ProductUpdate):
@@ -276,7 +275,6 @@ def update_product(product_id: int, product_data: ProductUpdate):
             cursor.execute(sql, tuple(params))
             connection.commit()
 
-        # ✅ Non-blocking background purge
         purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {"success": True, "message": "Product updated successfully!"}
@@ -287,7 +285,7 @@ def update_product(product_id: int, product_data: ProductUpdate):
 
 
 # ================================
-# 6. DELETE /products/{product_id} (Delete) — Async purge
+# 6. DELETE /products/{product_id}
 # ================================
 @router.delete("/products/{product_id}")
 def delete_product(product_id: int):
@@ -301,7 +299,6 @@ def delete_product(product_id: int):
             cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
             connection.commit()
 
-        # ✅ Non-blocking background purge
         purge_async(["/api/products/top", "/api/products", "/api/categories"])
 
         return {"success": True, "message": "Product deleted successfully!"}
