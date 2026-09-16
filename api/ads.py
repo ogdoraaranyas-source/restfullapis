@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 import pymysql
 
-from api.cache_helper import purge_vercel_cache   # ✅ Import purge helper
+from api.cache_helper import purge_vercel_cache
 
 router = APIRouter(tags=["Ads Management"])
 
@@ -38,7 +38,7 @@ class AdUpdate(BaseModel):
 
 
 # ================================
-# 📥 1. Create Ad — Purges cache
+# 📥 1. Create Ad — Purge by tags
 # ================================
 @router.post("/ads")
 def create_ad(ad_data: AdCreate):
@@ -55,8 +55,8 @@ def create_ad(ad_data: AdCreate):
             connection.commit()
             ad_id = cursor.lastrowid
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/ads"])
+        # ✅ CHANGE 1: Purge by TAG
+        purge_vercel_cache(["ads"])
 
         return {
             "success": True,
@@ -70,7 +70,7 @@ def create_ad(ad_data: AdCreate):
 
 
 # ================================
-# 📋 2. Get All Ads — Cached
+# 📋 2. Get All Ads — Cached with tag
 # ================================
 @router.get("/ads")
 def get_all_ads():
@@ -88,7 +88,9 @@ def get_all_ads():
         return JSONResponse(
             content={"success": True, "ads": ads},
             headers={
-                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+                # ✅ CHANGE 2: Shorter TTL + TAG
+                "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+                "Vercel-Cache-Tag": "ads",
             }
         )
     except pymysql.MySQLError as e:
@@ -123,7 +125,7 @@ def get_ad(ad_id: int):
 
 
 # ================================
-# 📝 4. Update Ad — Purges cache
+# 📝 4. Update Ad — Purge by tags
 # ================================
 @router.put("/ads/{ad_id}")
 def update_ad(ad_id: int, ad_data: AdUpdate):
@@ -156,8 +158,8 @@ def update_ad(ad_id: int, ad_data: AdUpdate):
             cursor.execute(sql, tuple(params))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/ads"])
+        # ✅ CHANGE 1: Purge by TAG
+        purge_vercel_cache(["ads"])
 
         return {"success": True, "message": "Ad updated successfully!"}
     except pymysql.MySQLError as e:
@@ -167,7 +169,7 @@ def update_ad(ad_id: int, ad_data: AdUpdate):
 
 
 # ================================
-# ❌ 5. Delete Ad — Purges cache
+# ❌ 5. Delete Ad — Purge by tags
 # ================================
 @router.delete("/ads/{ad_id}")
 def delete_ad(ad_id: int):
@@ -181,8 +183,8 @@ def delete_ad(ad_id: int):
             cursor.execute("DELETE FROM ads WHERE id = %s", (ad_id,))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/ads"])
+        # ✅ CHANGE 1: Purge by TAG
+        purge_vercel_cache(["ads"])
 
         return {"success": True, "message": "Ad deleted successfully!"}
     except pymysql.MySQLError as e:

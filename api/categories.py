@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import pymysql
 
-from api.cache_helper import purge_vercel_cache   # ✅ Import purge helper
+from api.cache_helper import purge_vercel_cache
 
 router = APIRouter(tags=["Categories Management"])
 
@@ -35,14 +35,13 @@ class CategoryUpdate(BaseModel):
 
 
 # ================================
-# 📥 1. Create Category — Purges cache
+# 📥 1. Create Category — Purge by tags
 # ================================
 @router.post("/categories")
 def set_category(cat_data: CategoryCreate):
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            # Prevent duplicate category strings
             cursor.execute("SELECT id FROM categories WHERE name = %s", (cat_data.name,))
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Category name already exists.")
@@ -51,8 +50,8 @@ def set_category(cat_data: CategoryCreate):
             cursor.execute(sql, (cat_data.name, cat_data.thumbnail_url))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/categories", "/api/products/top"])
+        # ✅ CHANGE 1: Purge by TAGS not paths
+        purge_vercel_cache(["categories", "products"])
 
         return {"success": True, "message": "Category created successfully!"}
     except pymysql.MySQLError as e:
@@ -62,7 +61,7 @@ def set_category(cat_data: CategoryCreate):
 
 
 # ================================
-# 👥 2. Get All Categories — Cached
+# 👥 2. Get All Categories — Cached with tag
 # ================================
 @router.get("/categories")
 def get_all_category():
@@ -80,7 +79,9 @@ def get_all_category():
         return JSONResponse(
             content={"success": True, "categories": categories},
             headers={
-                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+                # ✅ CHANGE 2: Shorter TTL + TAG header
+                "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+                "Vercel-Cache-Tag": "categories",
             }
         )
     except pymysql.MySQLError as e:
@@ -92,7 +93,7 @@ def get_all_category():
 
 
 # ================================
-# 📝 3. Edit Category — Purges cache
+# 📝 3. Edit Category — Purge by tags
 # ================================
 @router.put("/categories/{category_id}")
 def edit_category(category_id: int, cat_data: CategoryUpdate):
@@ -122,8 +123,8 @@ def edit_category(category_id: int, cat_data: CategoryUpdate):
             cursor.execute(sql, tuple(params))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/categories", "/api/products/top"])
+        # ✅ CHANGE 1: Purge by TAGS
+        purge_vercel_cache(["categories", "products"])
 
         return {"success": True, "message": "Category updated successfully!"}
     except pymysql.MySQLError as e:
@@ -133,7 +134,7 @@ def edit_category(category_id: int, cat_data: CategoryUpdate):
 
 
 # ================================
-# ❌ 4. Delete Category — Purges cache
+# ❌ 4. Delete Category — Purge by tags
 # ================================
 @router.delete("/categories/{category_id}")
 def delete_category(category_id: int):
@@ -147,8 +148,8 @@ def delete_category(category_id: int):
             cursor.execute("DELETE FROM categories WHERE id = %s", (category_id,))
             connection.commit()
 
-        # ✅ Purge Vercel CDN cache
-        purge_vercel_cache(["/api/categories", "/api/products/top"])
+        # ✅ CHANGE 1: Purge by TAGS
+        purge_vercel_cache(["categories", "products"])
 
         return {"success": True, "message": "Category deleted successfully!"}
     except pymysql.MySQLError as e:
