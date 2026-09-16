@@ -328,3 +328,68 @@ def delete_product(product_id: int):
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
+
+
+# ================================
+# ✅ GET /search — Global search with TiDB Full-Text
+# ================================
+@router.get("/search")
+def global_search(
+    q: str = Query("", min_length=0, max_length=50),
+    limit: int = Query(30, ge=1, le=100),
+):
+    if not q or len(q.strip()) == 0:
+        return {"success": True, "categories": [], "products": []}
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            search_term = q.strip()
+
+            # ✅ 1. Search categories with LIKE (small table)
+            cursor.execute("""
+                SELECT id, name, thumbnail_url, created_at
+                FROM categories
+                WHERE name LIKE %s
+                ORDER BY id DESC
+                LIMIT 10
+            """, (f"%{search_term}%",))
+            categories = cursor.fetchall()
+            for cat in categories:
+                if cat.get('created_at') and isinstance(cat['created_at'], datetime):
+                    cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+            # ✅ 2. Search products with FULLTEXT + LIKE fallback
+            cursor.execute("""
+                SELECT p.display_id, p.id, p.category_id, c.name as category_name,
+                       p.name, SUBSTRING(p.description, 1, 150) as description,
+                       p.price, p.stock, p.img_url, p.status, p.created_at, p.updated_at
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.status = 'active' AND (
+                    MATCH(p.name) AGAINST (%s IN NATURAL LANGUAGE MODE)
+                    OR p.name LIKE %s
+                    OR c.name LIKE %s
+                )
+                ORDER BY p.display_id ASC
+                LIMIT %s
+            """, (search_term, f"%{search_term}%", f"%{search_term}%", limit))
+            products = cursor.fetchall()
+            products = [clean_row(p) for p in products]
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "query": q,
+                "categories": categories,
+                "products": products,
+                "count": len(products),
+            },
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+            }
+        )
+    except pymysql.MySQLError as e:
+        raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
+    finally:
+        connection.close()
