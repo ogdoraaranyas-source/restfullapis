@@ -114,9 +114,6 @@ def create_product(product_data: ProductCreate):
 # ================================
 # 2. GET /products
 # ================================
-# ================================
-# 2. GET /products — Filter by category_id
-# ================================
 @router.get("/products")
 def get_all_products(
     category_id: Optional[int] = Query(None),
@@ -127,7 +124,6 @@ def get_all_products(
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             if category_id is not None:
-                # ✅ FILTER BY CATEGORY
                 print(f"🔍 Filtering by category_id={category_id}")
                 cursor.execute("""
                     SELECT p.display_id, p.id, p.category_id, c.name as category_name,
@@ -154,6 +150,7 @@ def get_all_products(
             products = cursor.fetchall()
             products = [clean_row(p) for p in products]
 
+        # ✅ NO CACHE — always fresh for filter queries
         return JSONResponse(
             content={
                 "success": True,
@@ -162,15 +159,14 @@ def get_all_products(
                 "filtered_by_category": category_id,
             },
             headers={
-                "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-                "Vercel-Cache-Tag": "products",
+                "Cache-Control": "no-store, no-cache, must-revalidate",
             }
         )
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
-        
+
 # ================================
 # 3. GET /products/top  (BEFORE /{product_id})
 # ================================
