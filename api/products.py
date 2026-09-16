@@ -115,7 +115,7 @@ def create_product(product_data: ProductCreate):
 # 2. GET /products
 # ================================
 # ================================
-# 2. GET /products — With category filter + pagination
+# 2. GET /products — Filter by category_id
 # ================================
 @router.get("/products")
 def get_all_products(
@@ -140,8 +140,7 @@ def get_all_products(
                     LIMIT %s OFFSET %s
                 """, (category_id, limit, offset))
             else:
-                # ✅ NO FILTER — return all
-                print(f"🔍 No filter, returning all products")
+                print(f"🔍 No filter — returning all products")
                 cursor.execute("""
                     SELECT p.display_id, p.id, p.category_id, c.name as category_name,
                            p.name, SUBSTRING(p.description, 1, 150) as description,
@@ -171,7 +170,7 @@ def get_all_products(
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
-
+        
 # ================================
 # 3. GET /products/top  (BEFORE /{product_id})
 # ================================
