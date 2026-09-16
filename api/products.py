@@ -347,13 +347,14 @@ def global_search(
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            search_term = f"%{q.strip()}%"
+            # ✅ Lowercase the search term
+            search_term = f"%{q.strip().lower()}%"
 
-            # ✅ 1. Search categories with LIKE
+            # ✅ Search categories — case-insensitive
             cursor.execute("""
                 SELECT id, name, thumbnail_url, created_at
                 FROM categories
-                WHERE name LIKE %s
+                WHERE LOWER(name) LIKE %s
                 ORDER BY id DESC
                 LIMIT 10
             """, (search_term,))
@@ -362,7 +363,7 @@ def global_search(
                 if cat.get('created_at') and isinstance(cat['created_at'], datetime):
                     cat['created_at'] = cat['created_at'].strftime('%Y-%m-%d %H:%M:%S')
 
-            # ✅ 2. Search products with LIKE ONLY
+            # ✅ Search products — case-insensitive
             cursor.execute("""
                 SELECT p.display_id, p.id, p.category_id, c.name as category_name,
                        p.name, SUBSTRING(p.description, 1, 150) as description,
@@ -370,8 +371,8 @@ def global_search(
                 FROM products p
                 LEFT JOIN categories c ON p.category_id = c.id
                 WHERE p.status = 'active' AND (
-                    p.name LIKE %s OR
-                    c.name LIKE %s
+                    LOWER(p.name) LIKE %s OR
+                    LOWER(c.name) LIKE %s
                 )
                 ORDER BY p.display_id ASC
                 LIMIT %s
