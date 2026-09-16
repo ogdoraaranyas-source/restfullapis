@@ -114,36 +114,63 @@ def create_product(product_data: ProductCreate):
 # ================================
 # 2. GET /products
 # ================================
+# ================================
+# 2. GET /products — With category filter + pagination
+# ================================
 @router.get("/products")
-def get_all_products():
+def get_all_products(
+    category_id: Optional[int] = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     connection = get_db_connection()
     try:
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            sql = """
-                SELECT p.display_id, p.id, p.category_id, c.name as category_name, p.name, 
-                       SUBSTRING(p.description, 1, 150) as description,
-                       p.price, p.stock, p.img_url, p.status, p.created_at, p.updated_at
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
-                ORDER BY p.display_id ASC
-            """
-            cursor.execute(sql)
-            products = cursor.fetchall()
+            if category_id is not None:
+                # ✅ FILTER BY CATEGORY
+                print(f"🔍 Filtering by category_id={category_id}")
+                cursor.execute("""
+                    SELECT p.display_id, p.id, p.category_id, c.name as category_name,
+                           p.name, SUBSTRING(p.description, 1, 150) as description,
+                           p.price, p.stock, p.img_url, p.status, p.created_at, p.updated_at
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    WHERE p.category_id = %s AND p.status = 'active'
+                    ORDER BY p.display_id ASC
+                    LIMIT %s OFFSET %s
+                """, (category_id, limit, offset))
+            else:
+                # ✅ NO FILTER — return all
+                print(f"🔍 No filter, returning all products")
+                cursor.execute("""
+                    SELECT p.display_id, p.id, p.category_id, c.name as category_name,
+                           p.name, SUBSTRING(p.description, 1, 150) as description,
+                           p.price, p.stock, p.img_url, p.status, p.created_at, p.updated_at
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    ORDER BY p.display_id ASC
+                    LIMIT %s OFFSET %s
+                """, (limit, offset))
 
-            # ✅ Convert Decimal/datetime
+            products = cursor.fetchall()
             products = [clean_row(p) for p in products]
 
         return JSONResponse(
-            content={"success": True, "products": products},
+            content={
+                "success": True,
+                "products": products,
+                "count": len(products),
+                "filtered_by_category": category_id,
+            },
             headers={
-                "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+                "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+                "Vercel-Cache-Tag": "products",
             }
         )
     except pymysql.MySQLError as e:
         raise HTTPException(status_code=500, detail=f"Database failure: {str(e)}")
     finally:
         connection.close()
-
 
 # ================================
 # 3. GET /products/top  (BEFORE /{product_id})
